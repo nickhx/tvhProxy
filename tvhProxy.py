@@ -4,7 +4,7 @@ import time
 import os
 import requests
 from gevent.pywsgi import WSGIServer
-from flask import Flask, Response, request, jsonify, abort
+from flask import Flask, Response, request, jsonify, abort, render_template
 
 app = Flask(__name__)
 
@@ -15,23 +15,26 @@ config = {
     'tvhProxyURL': os.environ.get('TVH_PROXY_URL') or 'http://localhost',
     'tunerCount': os.environ.get('TVH_TUNER_COUNT') or 6,  # number of tuners in tvh
     'tvhWeight': os.environ.get('TVH_WEIGHT') or 300,  # subscription priority
-    'chunkSize': os.environ.get('TVH_CHUNK_SIZE') or 1024*1024  # usually you don't need to edit this
+    'chunkSize': os.environ.get('TVH_CHUNK_SIZE') or 1024*1024,  # usually you don't need to edit this
+    'streamProfile': os.environ.get('TVH_PROFILE') or 'pass'  # specifiy a stream profile that you want to use for adhoc transcoding in tvh, e.g. mp4
 }
 
+discoverData = {
+    'FriendlyName': 'tvhProxy',
+    'Manufacturer' : 'Silicondust',
+    'ModelNumber': 'HDTC-2US',
+    'FirmwareName': 'hdhomeruntc_atsc',
+    'TunerCount': int(config['tunerCount']),
+    'FirmwareVersion': '20150826',
+    'DeviceID': '12345678',
+    'DeviceAuth': 'test1234',
+    'BaseURL': '%s' % config['tvhProxyURL'],
+    'LineupURL': '%s/lineup.json' % config['tvhProxyURL']
+}
 
 @app.route('/discover.json')
 def discover():
-    return jsonify({
-        'FriendlyName': 'tvhProxy',
-        'ModelNumber': 'HDTC-2US',
-        'FirmwareName': 'hdhomeruntc_atsc',
-        'TunerCount': int(config['tunerCount']),
-        'FirmwareVersion': '20150826',
-        'DeviceID': '12345678',
-        'DeviceAuth': 'test1234',
-        'BaseURL': '%s' % config['tvhProxyURL'],
-        'LineupURL': '%s/lineup.json' % config['tvhProxyURL']
-    })
+    return jsonify(discoverData)
 
 
 @app.route('/lineup_status.json')
@@ -50,7 +53,7 @@ def lineup():
 
     for c in _get_channels():
         if c['enabled']:
-            url = '%s/stream/channel/%s?weight=%s' % (config['tvhURL'], c['uuid'], int(config['tvhWeight']))
+            url = '%s/stream/channel/%s?profile=%s&weight=%s' % (config['tvhURL'], c['uuid'], config['streamProfile'],int(config['tvhWeight']))
 
             lineup.append({'GuideNumber': str(c['number']),
                            'GuideName': c['name'],
@@ -63,6 +66,11 @@ def lineup():
 @app.route('/lineup.post')
 def lineup_post():
     return ''
+
+@app.route('/')
+@app.route('/device.xml')
+def device():
+    return render_template('device.xml',data = discoverData),{'Content-Type': 'application/xml'}
 
 
 def _get_channels():
